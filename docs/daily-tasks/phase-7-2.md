@@ -4,7 +4,7 @@
 **周次**: Week 22-23
 **任务编号**: 7.2+7.3  
 **前置依赖**: phase-7-1 (M-CSA留出验证); Phase 5 完成 (含 phase-5-1 LLM接口, LOECO重新校准CGPS需完整Agent管线)  
-**阻塞后续**: phase-7-2.5 (渐进降级交叉验证需要留出验证结果), phase-7-3 (论文需要验证结果)  
+**阻塞后续**: phase-7-4 (IDR验证需要本任务的3组数据), phase-7-3 (论文需要验证结果)  
 **预计耗时**: 3.5天 (7.2跨EC泛化≈2天 + 7.3 CGD约束对比≈1.5天)  
 **预警检查点**: E2 (full-pool子集上 1BTL案例 Top-3), E4 (full-pool子集上 训练集 Top-3 ≥ 50%)  
 
@@ -26,12 +26,16 @@
 - [ ] 7.2.2 执行 LOECO 验证 (full-pool 子集上)
   - 对每个排除的 EC 类:
     1. 用其余6个 EC 类重新校准 CGPS (调 w1/w2/w3)
-    2. 在排除的 EC 类的 **full-pool 子集**上运行管线
-    3. 计算 Top-1/3/5, MRR
+    2. ⭐ **D22氧化还原分类**: 对EC 1(氧化还原酶)的entry, 调用redox_step_classifier标注redox_subclass:
+       - `cofactor_redox` → 纳入Scene A/B评估
+       - `metal_redox` → 仅纳入Scene C评估 (D22降级)
+       - `mixed_redox` → 辅因子步骤Scene A/B, 金属步骤Scene C
+    3. 在排除的 EC 类的 **full-pool 子集**上运行管线 (含D22降级逻辑)
+    4. 计算 Top-1/3/5, MRR (按redox_subclass分层)
   - 比较: LOECO 准确率 vs 全数据集准确率
   - **⚠️ E2 预警检查**: full-pool 子集上，1BTL 案例已知机制排名 Top-3
     - 未进 Top-3 → Step 2.5 规则映射问题
-  - **验收**: 7轮 LOECO 实验完成，E2 检查通过
+  - **验收**: 7轮 LOECO 实验完成，E2 检查通过，EC 1结果按redox_subclass分层统计
 
 - [ ] 7.2.3 ⭐ CGPS 校准回路验证
   - **目的**: 确保 LOECO 重新校准后的 CGPS 权重具有合理性，而非过拟合剩余6个 EC 类
@@ -55,7 +59,11 @@
   - 泛化能力最强的 EC 类 (损失最小)
   - 泛化能力最弱的 EC 类 (损失最大)
   - 原因分析: 氧化还原酶(EC1)的 D7-D10 扩展维度是否改善泛化?
-  - **验收**: Generalization metrics documented
+  - ⭐ **D22金属氧化还原影响分析**: EC 1排除时泛化损失是否主要由metal_redox子类贡献?
+    - 比较: 排除EC 1时, 仅cofactor_redox子类 vs 仅metal_redox子类的准确率差异
+    - 若metal_redox子类LOECO准确率显著低于cofactor_redox → D22降级策略有效(金属案例本身不适合3D验证)
+    - 若cofactor_redox子类LOECO准确率也很低 → CGPS权重对氧化还原类敏感，需分析是否需要EC特定权重
+  - **验收**: Generalization metrics documented, D22 metal redox impact analyzed
 
 ### 7.3: CGD约束对比实验
 
@@ -104,6 +112,7 @@
 3. **组1 实现风险**: 修改 PAP 跳过筛选可能引入 bug，需仔细验证
 4. **统计功效**: 对比实验的样本量 (200) 是否足以检测 10% 的差异? 需计算统计功效
 5. **⚠️ CGPS 校准回路过拟合**: LOECO 在6个 EC 类上重新校准 CGPS 时，若某个 EC 类在 Phase 4 全数据校准中贡献了特定权重方向，排除后权重可能发生大幅偏移；需通过校准回路检查 (7.2.3) 识别敏感权重，避免过拟合结论
+6. **⭐ D22金属氧化还原与LOECO交互**: 排除EC 1时，训练集缺少氧化还原酶数据，CGPS重新校准后的w2(S_geo权重)可能变化显著。金属氧化还原案例本身不适合Scene A/B的3D验证(D22已降级)，因此在LOECO中应按redox_subclass分层统计，避免metal_redox案例的Scene C低分拖低EC 1整体指标，产生虚假泛化损失
 
 ---
 
@@ -111,4 +120,4 @@
 
 1. 逐项检查验收标准
 2. 将所有 `[ ]` 改为 `[x]`
-3. 打开 `phase-7-2.5.md` 继续 (渐进降级交叉验证)
+3. 打开 `phase-7-4.md` 继续

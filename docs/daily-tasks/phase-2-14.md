@@ -56,6 +56,19 @@
     - 可进行 SMARTS 匹配
   - **验收**: BZG 配体 Mol 构建正确
 
+- [ ] 2.16.3 ⭐ DS3数据重建验证 (配体Mol临时方案 vs 正式方案对比)
+  - 目的: Phase 2-3使用临时方案(SMILES→Mol→3D conformer+坐标对齐)构建DS3，本任务提供正式的配体Mol构建。需验证临时方案数据是否可靠
+  - 方法:
+    1. 选取10个有配体的M-CSA entry
+    2. 用正式方案(CGD ligand_builder)重新计算反应原子坐标
+    3. 与临时方案的反应原子坐标对比，计算偏差
+    4. 如果偏差系统性>0.5Å → 触发DS3重建
+  - 判定:
+    - 偏差<0.5Å → 临时方案可接受，标注"DS3数据质量确认"
+    - 偏差≥0.5Å → 必须用正式方案重建DS3 (需+1天额外工作)
+  - 输出: `data/reports/ds3_rebuild_assessment.json` (含每条entry的偏差和重建建议)
+  - **验收**: 10条entry的临时vs正式方案对比完成; 若需重建, 重建完成
+
 - [ ] 2.15.1 编写 `cgd/geometry/angle_calculator.py` (1.5天)
   - ⚠️ **依赖 2.16**: 角度计算需要配体 Mol 的原子连接信息，必须先完成 2.16
   - 创建角度计算模块，定义 `AngleCalculator` 类
@@ -92,6 +105,7 @@
     - [ ] 5个数据集中4个完成
     - [ ] 配体Mol构建完成 (CGD构建阶段版)
     - [ ] 角度计算 A1-A3 完成
+    - [ ] DS3数据重建验证完成 (若需重建, DS3已更新)
   - 如果有未通过项: 记录原因，制定修复计划
   - **验收**: Phase 2 所有里程碑检查通过
 
@@ -100,6 +114,7 @@
 ## 输出文件清单
 
 - `data/reports/phase2_coverage.json`
+- `data/reports/ds3_rebuild_assessment.json`
 - `cgd/parsers/ligand_builder.py`
 - `cgd/geometry/angle_calculator.py`
 - `cgd/geometry/__init__.py` (如不存在)
@@ -116,6 +131,7 @@
 5. **配体 Mol 构建的键级推断**: ChemComp 提供的键级 (SINGLE/DOUBLE/AROMATIC) 需正确映射到 RDKit 的 BondType
 6. **覆盖度报告的分组统计**: Level 0 和 Level 1 的 n_obs 分布可能高度偏斜 (少数热门分组很多观测，多数分组很少)；报告需展示分位数而非仅均值
 7. **部分条目无法回填**: 即使有了 ligand_builder，部分配体的 SMARTS 匹配可能仍然失败，A1-A3 保持 null；这是可接受的
+8. **⭐ DS3临时方案可能需重建**: Phase 2-3的配体Mol构建使用临时方案(SMILES→3D conformer+Kabsch对齐)，与正式的CGD ligand_builder可能有系统性偏差。若偏差>0.5Å，DS3数据(距离分布、P5/P95阈值)需用正式方案重建，否则PAP筛选和CGPS评分的基础数据不可靠
 
 ---
 

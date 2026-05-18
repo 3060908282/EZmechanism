@@ -30,7 +30,14 @@
     - `ALA+oxyanion_hole` → `{atom_name: "N", atom_type: "N", function_location: "main-N"}`
     - `GLY+oxyanion_hole` → `{atom_name: "N", atom_type: "N", function_location: "main-N"}`
     - `WAT+proton_shuttle` → `{atom_name: "O", atom_type: "O"}`
-  - **验收**: 45+ 条映射，覆盖所有高频组合
+  - ⭐ 金属催化残基映射 (D22扩展):
+    - `ZN+electrostatic_stabiliser` → `{atom_name: "ZN", atom_type: "Zn", rationale: "锌离子配位稳定过渡态"}`
+    - `FE+electron_donor` → `{atom_name: "FE", atom_type: "Fe", rationale: "铁离子电子供体(氧化还原)"}`
+    - `FE+electrostatic_stabiliser` → `{atom_name: "FE", atom_type: "Fe", rationale: "铁离子静电稳定"}`
+    - `CU+electron_donor` → `{atom_name: "CU", atom_type: "Cu", rationale: "铜离子电子供体"}`
+    - `MN+electrostatic_stabiliser` → `{atom_name: "MN", atom_type: "Mn", rationale: "锰离子配位稳定"}`
+    - `MG+electrostatic_stabiliser` → `{atom_name: "MG", atom_type: "Mg", rationale: "镁离子静电稳定"}`
+  - **验收**: 45+ 条映射(含金属催化残基)，覆盖所有高频组合(含金属催化残基的(residue_type, role)组合)
 
 - [ ] 1.3.3 处理 function_location_abv (主链原子)
   - M-CSA API 提供 `function_location_abv` 字段
@@ -44,6 +51,13 @@
   - 在对应 PDB 文件中定位催化残基，检查映射的 atom_name 是否存在
   - 特别关注: GLU 的 OE1/OE2 选择、ASP 的 OD1/OD2 选择、HIS 的 ND1/NE2 选择
   - **验收**: 10 个抽查条目的 atom_name 在 PDB 中全部存在且位置合理
+
+- [ ] 1.3.5 金属催化残基映射验证 (⭐ D22扩展)
+  - M-CSA中金属催化残基(ZN/FE/CU/MN/MG)的出现频率统计
+  - 验证金属原子在PDB HETATM中的存在性(金属离子在PDB中以HETATM记录, 非ATOM)
+  - 特别注意: 同一金属可能在不同条目中有不同角色(如FE既可是electron_donor也可是electrostatic_stabiliser)
+  - ⚠️ 此映射直接影响D5距离类别(metal_ligand→ligand_atom)的计算, 缺失将导致Phase 2-3 DS3构建中D5数据链断裂
+  - **验收**: 金属催化残基映射覆盖M-CSA中出现频率≥5次的(residue_type, role)组合; D5距离类别可正确计算
 
 ---
 
@@ -60,6 +74,7 @@
 3. **主链原子标注遗漏**: oxyanion_hole 角色通常使用主链 N 原子，容易误写为侧链原子。务必检查 function_location_abv 字段
 4. **罕见残基-角色组合**: 如 MET+nucleophile, TRP+electrostatic_stabiliser 等低频组合，可暂不映射但记录为 "unmapped"，后续按需补充
 5. **同一残基不同角色不同原子**: SER+nucleophile → OG，但 SER+proton_donor 也可能是 OG；同一原子多角色是正常的，但需确认 rationale 描述准确
+6. **⭐ 金属催化残基的D5依赖**: Phase 2-3定义了D5距离类别(metal_ligand→ligand_atom)，但如果没有金属催化残基的active_atom映射，D5将无法计算。本任务必须覆盖金属催化残基，否则D5数据链断裂，影响Phase 2-10 PAP筛选和Phase 4 CGPS S_geo评分
 
 ---
 

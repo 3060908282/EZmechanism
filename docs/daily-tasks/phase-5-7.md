@@ -53,6 +53,32 @@
   - 无 Agent 评审 → confidence 降低
   - **验收**: 无 LLM 时仍有合理裁决
 
+- [ ] 5.7.6 ⭐ 实现 Scene C 低分仲裁特殊逻辑 (三层漏斗第二层整合)
+  - **背景**: Scene C + 低分强制触发Agent③④⑤后，仲裁结果可能为`needs_revision`但没有更好替代方案。此时系统不能卡住，需输出结构化的降级分析报告
+  - 处理逻辑:
+    1. 正常仲裁流程 → ArbiterResult
+    2. **Scene C + needs_revision 特殊处理**:
+       - 如果ArbiterResult.verdict == "needs_revision" 且 scene == "C":
+         - 不回退重试 (Scene C无法升级)
+         - 在ArbiterResult中附加 `fallback_analysis` 字段 (见phase-5-8定义)
+         - 将verdict语义从"需修订"转为"低置信度假设"——系统定位从"预测工具"变为"假设生成工具"
+    3. **Scene C + reject 特殊处理**:
+       - 如果全部Agent都reject → 明确输出"该机制在当前数据下不可信"
+       - 但仍输出fallback_analysis供参考 (可能对其他候选机制有用)
+  - ArbiterResult 扩展:
+    ```python
+    @dataclass
+    class ArbiterResult:
+        verdict: str
+        confidence: float
+        reasoning: str
+        adjustments: dict
+        # ⭐ 新增: Scene C降级分析 (仅Scene C + 低分时填充)
+        fallback_analysis: Optional[dict] = None
+        scene_c_enhanced: bool = False  # 标记是否经过Scene C增强处理
+    ```
+  - **验收**: Scene C + needs_revision → fallback_analysis不为空; Scene A/B不受影响
+
 ---
 
 ## 输出文件清单
@@ -69,6 +95,7 @@
 2. **仲裁者偏见**: LLM 可能偏向于 "needs_revision" (最安全的选择)，需在 prompt 中强调决策性
 3. **confidence 校准**: Arbiter 的 confidence 需与 CGPS 分数对齐，避免两者严重矛盾
 4. **循环依赖**: Arbiter 不应修改底层 CGPS/EZ 评分，仅做裁决和置信度调整
+5. **⭐ Scene C needs_revision不是死循环**: Scene C无法升级验证，Arbiter给出needs_revision后不应重试验证流程，而应直接输出fallback_analysis并标记scene_c_enhanced=True
 
 ---
 

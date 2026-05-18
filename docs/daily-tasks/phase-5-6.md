@@ -38,7 +38,12 @@
     - 是否有已知的替代机制
     - 关键残基突变实验数据是否一致
     - 辅因子需求是否与文献一致
-  - **验收**: Agent⑤可返回结构化评审结果
+  - ⚠️ **M18修正: 严格禁止编造文献引用**: Agent⑤的prompt必须包含以下硬性指令:
+    - "你必须严格区分已知事实和你的推理。如果你不确定某条文献是否存在，请回答'unknown'而非编造引用。"
+    - "禁止生成具体的PubMed ID、DOI、作者名或期刊名，除非你完全确定其存在。如需引用，仅提供概括性描述(如'已有文献报道转氨酶中PLP形成Schiff碱的机制')。"
+    - references字段中，编造的引用和真实的引用必须明确区分(标记`verified: false`/`verified: true`)
+    - 默认所有LLM生成的引用为`verified: false`，除非在CGD或M-CSA数据中有对应记录
+  - **验收**: Agent⑤可返回结构化评审结果; 文献引用标注verified状态; 无编造的DOI/PMID
 
 - [ ] 5.6.4 统一评审结果格式
   - 所有 Agent 返回统一格式:
@@ -59,6 +64,60 @@
   - 部分Agent失败 → 仅用成功的Agent结果
   - **验收**: Multi-agent review returns structured feedback
 
+- [ ] 5.6.6 ⭐ 实现 Scene C 专用 Prompt 约束 (三层幻觉防护)
+  - **背景**: Scene C下Agent无3D结构数据，幻觉风险远高于Scene A/B。需三层防护机制确保输出可靠性
+  - **防护层1: Scene C专用系统提示** — 编写 `agents/prompts/scene_c_system_prompt.py`
+    ```python
+    SCENE_C_SYSTEM_PROMPT = """
+    ⚠️ 警告：当前为 Scene C 模式（无 3D 结构数据）
+
+    约束规则：
+    1. 禁止编造具体的原子坐标、距离、角度等 3D 信息
+    2. 所有催化残基推断必须基于：
+       - 已知 EC 类的保守残基模式
+       - 序列比对结果
+       - 文献支持
+    3. 每个推断必须标注置信度：
+       - high: 有 EC 类保守性 + 文献支持
+       - medium: 仅有 EC 类保守性
+       - low: 仅基于化学推理
+    4. 如无法确定，明确说明"无法推断"而非猜测
+
+    输出格式（每个推理结论必须包含）：
+    {
+      "inference": "...",
+      "evidence": ["EC 类保守模式", "PMID:123456"],
+      "confidence": "high/medium/low",
+      "fabrication_risk": "low/medium/high"
+    }
+    """
+    ```
+  - Agent③/④/⑤在Scene C模式下，system_prompt中注入SCENE_C_SYSTEM_PROMPT
+  - **防护层2: 多Agent交叉验证** — 编写 `agents/scene_c_cross_validator.py`
+    - 核心函数: `cross_validate(agent3_result, agent4_result, agent5_result) → CrossValidationResult`
+    - 验证逻辑:
+      - Agent③催化残基推断 ∩ Agent⑤文献残基共识 → agreement_score
+      - agreement_score ≥ 0.67 → fabrication_risk="low"
+      - 0.33 ≤ agreement_score < 0.67 → fabrication_risk="medium"
+      - agreement_score < 0.33 → fabrication_risk="high"
+    - 输出: `CrossValidationResult(agreement_score, fabrication_risk, consensus_residues, disputed_residues)`
+  - **防护层3: 可靠性评估标注** — 在AgentReview中增加Scene C可靠性字段:
+    ```python
+    @dataclass
+    class AgentReview:  # 扩展
+        # ... 原有字段 ...
+        scene_c_reliability: Optional[SceneCReliability] = None  # 仅Scene C时填充
+
+    @dataclass
+    class SceneCReliability:
+        fabrication_risk: str          # "low"/"medium"/"high"
+        agent_agreement_score: float   # 0.0-1.0
+        consensus_residues: List[str]  # Agent间一致的残基
+        disputed_residues: List[str]   # Agent间不一致的残基
+        recommendation: str            # 可靠性建议文本
+    ```
+  - **验收**: Scene C模式下Agent使用专用prompt; 交叉验证可检测不一致; 可靠性评估输出完整
+
 ---
 
 ## 输出文件清单
@@ -69,9 +128,12 @@
 - `agents/prompts/catalytic_prompt.py`
 - `agents/prompts/structural_prompt.py`
 - `agents/prompts/literature_prompt.py`
+- `agents/prompts/scene_c_system_prompt.py` (⭐ 新增: Scene C专用系统提示)
+- `agents/scene_c_cross_validator.py` (⭐ 新增: Scene C多Agent交叉验证)
 - `tests/test_agent3_catalytic.py`
 - `tests/test_agent4_structural.py`
 - `tests/test_agent5_literature.py`
+- `tests/test_scene_c_cross_validator.py` (⭐ 新增)
 
 ---
 
@@ -81,6 +143,9 @@
 2. **LLM 幻觉锚定**: 每个 Agent 的 prompt 应包含具体的 CGD 数据 (距离、频率)，减少 LLM "凭空"推理
 3. **verdict 校准**: LLM 可能倾向于给 "accept" (礼貌偏好)，需在 prompt 中强调批判性思维
 4. **超时管理**: 3个Agent并行调用，总时间受最慢Agent限制，需设置单Agent超时 (60s)
+5. **⭐ M18修正: Agent⑤文献幻觉风险极高**: LLM编造文献引用(DOI/PMID/作者)的倾向非常强，这是已知的LLM系统性缺陷。必须在prompt中硬编码"禁止编造"指令，且所有引用默认标记为`verified: false`。如果Agent⑤的references列表中全部为`verified: false`，则该Agent的confidence应自动降权至0.3
+6. **⭐ Scene C下幻觉风险倍增**: 无3D结构时Agent更容易"编造"几何信息(如"亲核残基距底物3.5Å")。Scene C专用prompt的约束1(禁止编造3D信息)必须严格执行，输出中任何3D信息都应视为幻觉标记
+7. **⭐ 交叉验证不等于真实验证**: 多Agent一致性(agreement_score高)不等于结果正确——三个Agent可能基于相同的错误前提得出一致结论。交叉验证只能检测"不一致"(高幻觉风险)，不能保证"一致"就是正确的
 
 ---
 

@@ -49,15 +49,63 @@
   - LLM 消歧质量: 抽样 20 条 LLM-confirmed 映射，人工验证
   - **验收**: 1:N mapping coverage improved
 
+- [ ] 5.3.6 ⭐ 实现运行时动态映射 + 缓存 (方案B: 在线按需映射)
+  - **背景**: Layer 0+1离线批量映射后仍有35-40%规则unmapped。S_path权重w3≈0.1-0.15在Scene A/B下影响有限(约7-15%判别力损失)，但在Scene C下影响较大(约15-20%判别力损失)。运行时动态映射可在遇到unmapped规则时按需调用Agent②，避免离线批量映射的低效
+  - 设计原则: **离线映射覆盖高频规则，在线映射补充低频规则**
+  - 实现:
+    ```python
+    class RuleMapper:
+        def __init__(self, mapping_table, llm_client, cache_path):
+            self.mapping_table = mapping_table  # Layer 0+1 离线结果
+            self.llm_client = llm_client
+            self.cache = self._load_cache(cache_path)  # 持久化缓存
+        
+        def map_rule(self, mechfind_rule, substrate_smiles=None, product_smiles=None):
+            # Step 1: 查离线映射表 (含Layer 0+1)
+            if mechfind_rule.id in self.mapping_table:
+                result = self.mapping_table[mechfind_rule.id]
+                if result.mapping_type != 'unmapped':
+                    return result  # 命中离线映射
+            
+            # Step 2: 查运行时缓存
+            if mechfind_rule.id in self.cache:
+                return self.cache[mechfind_rule.id]
+            
+            # Step 3: 在线调用Agent② (仅对unmapped规则)
+            if self.llm_client.is_available():
+                candidates = self._search_candidates(mechfind_rule)
+                if candidates:
+                    result = self._online_translate(
+                        mechfind_rule, candidates,
+                        substrate_smiles, product_smiles  # 上下文增强
+                    )
+                    self.cache[mechfind_rule.id] = result  # 缓存结果
+                    self._save_cache()  # 持久化
+                    return result
+            
+            # Step 4: 全部失败 → 返回unmapped
+            return TranslatedRule(mapping_type='unmapped', llm_confidence=0.0)
+    ```
+  - 缓存策略:
+    - 运行时映射结果持久化到 `data/cache/runtime_rule_mappings.json`
+    - 缓存命中后不再调用LLM → 后续相同规则直接走缓存
+    - 定期将高频缓存结果合并回离线映射表
+  - 上下文增强: 运行时映射可提供substrate_smiles和product_smiles，比离线映射有更多上下文
+  - **注意**: S_path权重w3≈0.1-0.15本身很低，即使运行时映射失败(S_path=0.5中性值)，对CGPS总体影响有限。运行时映射是"锦上添花"而非"雪中送炭"
+  - **验收**: unmapped规则可在线映射+缓存; 缓存命中率可统计; LLM不可用时仍能降级
+
 ---
 
 ## 输出文件清单
 
 - `agents/agent2_translator.py`
 - `agents/prompts/translator_prompt.py`
+- `agents/rule_mapper.py` (⭐ 新增: 运行时动态映射+缓存)
 - `data/datasets/DS5_rule_crossmapping.json` (Layer 1 更新)
 - `data/derived/rule_mapping_table.json` (Layer 1 更新)
+- `data/cache/runtime_rule_mappings.json` (⭐ 新增: 运行时映射缓存)
 - `tests/test_agent2_translator.py`
+- `tests/test_rule_mapper.py` (⭐ 新增)
 
 ---
 
@@ -67,6 +115,9 @@
 2. **候选数量**: EZ 规则库有 6083 条，全部交给 LLM 不现实，需先按键变化类型过滤到 ≤10 条候选
 3. **Layer 1 置信度**: LLM-confirmed 映射的置信度低于 direct SMARTS 匹配，在 S_path 计算中需反映
 4. **更新原子性**: 更新 DS5 和 rule_mapping_table 需保持一致性，避免一个更新另一个没更新
+5. **⭐ 运行时映射的LLM成本**: 每个unmapped规则调用一次Agent②，约800 tokens。如果一次管线有5个候选×3个unmapped步骤=15次调用。对于批量验证(200个测试样本)，缓存命中后成本可控
+6. **⭐ 运行时映射失败不影响系统运转**: 即使Agent②运行时映射也失败，S_path设为0.5(中性值)，CGPS仍可正常计算。w3≈0.1-0.15意味着S_path失效只损失约7-15%判别力(不是千问误算的37.5%)
+7. **⭐ 缓存一致性**: 运行时映射缓存与离线映射表可能有冲突(同一条规则不同结果)。优先级: 离线映射 > 运行时缓存。如果离线映射更新了，需清除对应的运行时缓存
 
 ---
 

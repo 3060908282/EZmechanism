@@ -4,7 +4,7 @@
 > **日期**: 2026-03-10
 > **整合**: CGD_MASTER_PLAN v3.3 + IMPLEMENTATION_PLAN v3.5 + GAP_AUDIT_G1-G16 v2.0
 > **架构**: 方案B — 交互式管线 + Step 2.5 规则映射层
-> **总工期**: ~136天 / 27.2周 (1人全职, 顺序估算; 含Phase间并行约~24周)
+> **总工期**: ~139天 / 27.8周 (1人全职, 顺序估算; 含Phase间并行约~25周; 审计修正Phase 7.4缩减0.5天)
 
 ---
 
@@ -15,22 +15,23 @@
 2. [三个场景](#2-三个场景)
 3. [GAP 摘要表](#3-gap-摘要表)
 4. [里程碑时间线](#4-里程碑时间线)
-5. [架构决策 D1-D17](#5-架构决策-d1-d17)
-6. [项目目录映射](#6-项目目录映射)
-7. [三文档依赖链](#7-三文档依赖链)
-8. [前端复用策略](#8-前端复用策略)
+5. [双层质量评估框架](#5-双层质量评估框架)
+6. [架构决策 D1-D22](#6-架构决策-d1-d22)
+7. [项目目录映射](#7-项目目录映射)
+8. [三文档依赖链](#8-三文档依赖链)
+9. [前端复用策略](#9-前端复用策略)
 
 **Part 2: 每日实施指南**
-9. [Phase 0: 基础设施](#phase-0-基础设施)
-10. [Phase 1: CGD核心数据](#phase-1-cgd核心数据)
-11. [Phase 2: CGD配体数据](#phase-2-cgd配体数据)
-12. [Phase 2.5: EZ验证运行时](#phase-25-ez验证运行时)
-13. [Phase 3: CGD规则映射+优化](#phase-3-cgd规则映射优化)
-14. [Phase 4: CGPS评分](#phase-4-cgps评分)
-15. [Phase 5: LLM Agent管线](#phase-5-llm-agent管线)
-16. [Phase 5.5: 氧化还原+氢原子](#phase-55-氧化还原氢原子)
-17. [Phase 6: 系统集成](#phase-6-系统集成)
-18. [Phase 7: 验证与论文](#phase-7-验证与论文)
+10. [Phase 0: 基础设施](#phase-0-基础设施)
+11. [Phase 1: CGD核心数据](#phase-1-cgd核心数据)
+12. [Phase 2: CGD配体数据](#phase-2-cgd配体数据)
+13. [Phase 2.5: EZ验证运行时](#phase-25-ez验证运行时)
+14. [Phase 3: CGD规则映射+优化](#phase-3-cgd规则映射优化)
+15. [Phase 4: CGPS评分](#phase-4-cgps评分)
+16. [Phase 5: LLM Agent管线](#phase-5-llm-agent管线)
+17. [Phase 5.5: 氧化还原+氢原子](#phase-55-氧化还原氢原子)
+18. [Phase 6: 系统集成](#phase-6-系统集成) (+1.5天 D19确认卡片)
+19. [Phase 7: 验证与论文](#phase-7-验证与论文)
 
 ---
 
@@ -44,7 +45,18 @@
 ▼
 ┌──────────────────────────────────────────────────┐
 │ Step 0: MechFind (port 3002)                     │
-│ 黑盒调用：SMILES → Top-N 候选机制 JSON            │
+│ SMILES → Top-N 候选机制 JSON                      │
+│ 每条含 similarity → M-CSA ID 链接 (D19预选入口)   │
+└──────────────────────┬───────────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────────┐
+│ ⭐ PDB自动预选 (D19: 选择题而非填空题)            │
+│ 1. 路径按M-CSA ID分组                             │
+│ 2. 每组自动搜索PDB (locate_by_mcsa_id)            │
+│ 3. 检查残基兼容性 (check_residue_compatibility)    │
+│ 4. 生成确认卡片 → 用户确认/修正                    │
+│ 5. 降级: 无M-CSA→用户EC/UniProt→Scene C           │
 └──────────────────────┬───────────────────────────┘
                        │
                        ▼
@@ -58,7 +70,7 @@
                        │
                        ▼
 ┌──────────────────────────────────────────────────┐
-│ 场景判定 (交互式 + 系统半自动辅助)                  │
+│ 场景判定 (基于PDB预选结果自动确定)                  │
 └─────┬────────────┬────────────┬──────────────────┘
       │            │            │
       ▼            ▼            ▼
@@ -106,7 +118,7 @@
 | G11 | 🟢低 | `ez_validator/confidence_calculator.py` | 0% | 2.5 | 1天 |
 | G15 | 🟢低 | `ez_validator/geometry/hydrogen_adder.py` | 20% | 5.5 | 0.3天 |
 
-> **关键路径**: G6(0.7d)→G8(0.6d)→G13(0.3d)→G1(1.5d)→G10(1d)→G12(1d) = **5.1天** (原10.5天, 缩减51%)
+> **关键路径**: G6(1.0d)→G8(0.6d)→G13(0.3d)→G1(1.5d)→G10(1d)→G12(1d) = **5.4天** (原10.5天, 缩减49%)
 >
 > ⚠️ G17(+1天, `cgd/statistics/`+`cgd/builders/`) 已分摊至 Phase 1-13 和 Phase 2-3 任务估算中
 
@@ -120,9 +132,78 @@
 | M4 | Week 14 | DS5 Layer 0(含residue_info)+统计消歧+CGD全就绪 |
 | M5 | Week 16 | CGPS评分函数+阈值校准+灰色区间 |
 | M6 | Week 20 | Agent①-⑥管线+氧化还原+氢原子+DS5 Layer 1 |
-| M7 | Week 25 | 渐进降级交叉验证+M-CSA验证+论文 |
+| M7 | Week 26 | 渐进降级交叉验证+M-CSA验证+论文 |
 
-## 5. 架构决策 D1-D17
+## 5. 双层质量评估框架
+
+### 5.1 质量评分 (Quality Score)
+
+**定义**:
+```
+quality_score = final_confidence × 100 × grey_zone_penalty
+```
+
+其中:
+- `final_confidence = 0.25×MF + 0.50×EZ + 0.15×Agent + 0.10×Arbiter`
+- 权重重归一化规则: 缺失分量按剩余分量原始比例分配
+- 设计约束: EZ=0时final_confidence不超过0.50
+
+**分量表**:
+
+| 分量 | 权重 | 来源 | 说明 |
+|------|------|------|------|
+| MF | 0.25 | MechFind相似度 | 搜索阶段评分 |
+| EZ | 0.50 | EZ验证评分 | Scene A: S_geo, Scene B: S_geo×降权, Scene C: CGPS |
+| Agent | 0.15 | Agent③④⑤共识率 | n_accept / n_total |
+| Arbiter | 0.10 | Agent⑥裁决 | accept=1.0, needs_revision=0.5, reject=0.0 |
+
+**grey_zone_penalty**:
+
+| CGPS范围 | 判定 | penalty | 含义 |
+|----------|------|---------|------|
+| > θ_high (≈0.72) | 已验证 | 1.0 | 3D验证充分，不降权 |
+| θ_low ~ θ_high (≈0.28~0.72) | 灰色区间 | 0.85 | 3D验证不充分，轻微降权 |
+| ≤ θ_low (≈0.28) | 未验证 | 0.60 | 3D验证失败，大幅降权 |
+
+**阈值确定** (Phase 7.1):
+- 总成本 = (w × FP) + FN，其中 **w=0.5** (非CASSIA的w=2)
+- FP: 正确机制被标记为低质量（浪费计算但不影响最终正确性）
+- FN: 错误机制被标记为高质量（可能导致实验资源浪费，代价极高）
+- w=0.5的理由: 在酶机制预测中，FN代价远高于FP
+
+**阈值分级表** (由7.1.3c确定，T_Q约75):
+
+| quality_score区间 | 置信度等级 | 建议行动 |
+|------------------|-----------|---------|
+| 90-100 | 高 | 直接采纳 |
+| [T_Q]-90 | 中 | 人工复核 |
+| <[T_Q] | 低 | 触发Agent评审或放弃 |
+
+### 5.2 信息衰减稳健性评分 (IDR)
+
+**全称**: Information Degradation Robustness Score
+
+**计算方法**:
+```
+IDR(A,B) = Kendall_τ(rank_A, rank_B)
+```
+
+**学术定义** (论文Methods可用):
+> 为了量化我们的方法在结构信息缺失时的可靠性边界，我们设计了信息衰减稳健性评分（Information Degradation Robustness, IDR）。对于同一酶反应，我们分别在三种信息层次下运行验证管线——完整结构数据（场景A）、仅有蛋白质骨架（场景B）、无结构数据（场景C）——并计算各场景排名结果与最丰富信息场景（场景A）的排序相关性（Kendall τ）。IDR取值范围为-1到1，越高表示方法对信息缺失越不敏感。
+
+**IDR降级曲线**:
+- IDR(A,B) > IDR(A,C): 信息缺失越多，一致性越低(预期)
+- 低IDR entry: 对信息缺失敏感，需关注
+- 高IDR entry: 对信息缺失鲁棒，验证方法稳健性
+
+**与CASSIA CS评分的本质区别**:
+- CASSIA CS: 衡量同一输入多次运行的**可重复性** (repeatability)，不一致源于LLM随机性
+- IDR: 衡量不同信息层次下输出的**稳健性** (robustness)，不一致源于输入信息系统性缺失
+- 两者概念不同、成因不同、适用场景不同
+
+---
+
+## 6. 架构决策 D1-D22
 
 | # | 决策 | 理由 | 状态 |
 |---|------|------|------|
@@ -143,8 +224,14 @@
 | D15 | M-CSA批量下载归入 Phase 3-1 | 为路径2和DS5 residue_info提供完整残基数据缓存 | ✅ |
 | D16 | 渐进降级交叉验证: 内部一致性评估，非外部准确性基准 | Scene A是银标准(非金标准)，量化信息缺失→输出衰减程度；Scene C采用A的残基组合(隔离变量)；PAP RMSD直接验证 | ✅ |
 | D17 | E1双阈值 + full-pool/limited_pool 分类 | E1不再用单一recall@5≥50%，改为双阈值: (1)MechFind搜索成功→进入候选池; (2)候选≥5条→full_pool(纳入量化), <5条→limited_pool(仅定性); E2-E5全部在full-pool子集上检查 | ✅ |
+| D18 | 双层质量评估框架 | quality_score × grey_zone_penalty + IDR | ✅ |
+| D19 | IDR命名而非CS | 信息衰减稳健性评分原创命名，避免抄袭CASSIA的CS；IDR衡量稳健性(robustness)而非可重复性(repeatability) | ✅ |
+| D20 | 质量评分阈值w=0.5 | FN代价远高于FP(错误机制→实验灾难 vs 正确机制→浪费计算)，w=0.5而非w=2 | ✅ |
+| D21 | PDB自动预选(选择题而非填空题) | 利用MechFind similarity→M-CSA→EC→PDB链路自动预选PDB+残基，用户仅确认 | ✅ |
+| D22 | 氧化还原验证范围分级 | 辅因子氢负转移(NAD⁺/FAD/FMN)→完整3D验证(Scene A/B)；纯金属价态变化(Fe²⁺→Fe³⁺)→不可3D验证，自动降级Scene C+配位几何分析；RunReactants无法模拟金属价态变化 | ✅ |
+| D23 | 4组精简消融实验 | full/compute_only/no_review/no_A6；计算管线缓存复用+仅变LLM调用；GPT-4o自然管线≈$30；分场景+分争议级别+Agent一致性作为后处理分析维度(零额外成本) | ✅ |
 
-## 6. 项目目录映射
+## 7. 项目目录映射
 
 ```
 /home/z/my-project/
@@ -200,6 +287,7 @@
 │       ├── ez_validator/                   ← EZ验证运行时
 │       │   ├── scene_resolver.py           ← G6+G16 场景判定+降级
 │       │   ├── pdb_locator.py              ← G8 PDB获取+残基定位
+│       │   ├── types.py                    ← ⭐ 共享类型定义(C1修复)
 │       │   ├── ligand_builder.py           ← G13 配体Mol构建
 │       │   ├── scene_a_validator.py        ← G1 Scene A验证
 │       │   ├── scene_b_validator.py        ← Scene B验证(PAP+验证)
@@ -215,9 +303,9 @@
 │       │   │   └── verification_result.py  ← G5 统一结果格式
 │       │   └── redox/                      ← G9 氧化还原(Phase 5.5)
 │       │       ├── redox_center_identifier.py
-│       │       ├── electron_transfer_validator.py
+│       │       ├── redox_step_classifier.py      ← ⭐ D22: 步骤分类(非electron_transfer_validator)
 │       │       ├── cofactor_geometry_validator.py
-│       │       ├── metal_center_validator.py
+│       │       ├── metal_coordination_analyzer.py ← ⭐ D22: 配位几何分析(非metal_center_validator)
 │       │       └── redox_distance_categories.py
 │       ├── cgd/                            ← CGD构建层(离线)
 │       │   ├── builders/                   ← DS1-DS5构建器
@@ -254,7 +342,7 @@
 │
 ├── docs/
 │   ├── HANDBOOK.md                         ← ★ 本文档
-│   ├── daily-tasks/                        ← 执行者任务清单(78个文件)
+│   ├── daily-tasks/                        ← 执行者任务清单(79个文件)
 │   │   ├── phase-0-1.md ~ phase-0-5.md      ← Phase 0 (12个任务, 5个文件; 0.11/0.12合并于phase-0-5.md)
 │   │   ├── phase-1-1.md ~ phase-1-13.md     ← Phase 1 (13个任务)
 │   │   ├── phase-2-1.md ~ phase-2-14.md     ← Phase 2 (16个任务, 14个文件; 2.15/2.16合并于phase-2-14.md)
@@ -264,14 +352,14 @@
 │   │   ├── phase-5-1.md ~ phase-5-9.md      ← Phase 5 (12个任务, 9个文件)
 │   │   ├── phase-5.5-1.md ~ phase-5.5-4.md  ← Phase 5.5 (6个任务, 4个文件)
 │   │   ├── phase-6-1.md ~ phase-6-4.md      ← Phase 6 (5个任务, 4个文件)
-│   │   ├── phase-7-1.md, phase-7-2.md, phase-7-2.5.md, phase-7-3.md  ← Phase 7 (7个任务, 4个文件)
+│   │   ├── phase-7-1.md, phase-7-2.md, phase-7-2.5.md, phase-7-3.md, phase-7-4.md  ← Phase 7 (7个任务, 5个文件)
 │   ├── CGD_MASTER_PLAN.md                  ← 源文档(参考)
 │   ├── IMPLEMENTATION_PLAN.md              ← 源文档(参考)
 │   └── GAP_AUDIT_G1-G16.md                ← 源文档(参考)
 └── ...
 ```
 
-## 7. 三文档依赖链
+## 8. 三文档依赖链
 
 ```
 CGD_MASTER_PLAN (数据规范) ← 定义"做什么"
@@ -285,7 +373,7 @@ GAP_AUDIT_G1-G16 (缺口审计) ← 定义"缺什么+复用什么"
     └──→ 反馈到 IMPLEMENTATION_PLAN (v3.3→v3.5修正)
 ```
 
-### 7个关键约束 (4个不可跳过 + 3个调度约束)
+### 8个关键约束 (4个不可跳过 + 3个调度约束)
 
 1. **不可跳过CGD做验证** — DS2/DS3统计分布是验证阈值来源
 2. **不可跳过Phase 1做Phase 2** — 辅助文件(active_atom_definitions等)是DS3前置
@@ -295,7 +383,7 @@ GAP_AUDIT_G1-G16 (缺口审计) ← 定义"缺什么+复用什么"
 6. **⚠️ Phase 2.5-4与Phase 3存在数据依赖循环** — rule_mapper.py路径2需要DS5映射表(Phase 3-4产出)，开发期用mock数据，Phase 3完成后需回归验证；路径1(parse_protonation_rule)和路径3(化学推断)不依赖DS5
 7. **⚠️ Phase 2.5-13(Scene C)与Phase 4存在数据依赖** — Scene C验证器需CGPS评分函数(Phase 4产出)，开发期用mock scorer，Phase 4完成后需回归验证
 
-## 8. 前端复用策略
+## 9. 前端复用策略
 
 **总策略**: 60%直接复制 + 25%适配修改 + 15%全新编写
 
@@ -337,7 +425,7 @@ GAP_AUDIT_G1-G16 (缺口审计) ← 定义"缺什么+复用什么"
 - [ ] RDKit SMARTS匹配正常
 - [ ] MechFind服务可达+数据可导出
 
-**预计耗时**: 6.5天 (Week 1-2) | **下一步**: 进入Phase 1
+**预计耗时**: 6.5天 (Week 1-2, 含缓冲) | **下一步**: 进入Phase 1
 
 ---
 
@@ -428,8 +516,8 @@ GAP_AUDIT_G1-G16 (缺口审计) ← 定义"缺什么+复用什么"
 
 | 任务ID | 任务 | 产出 | 缺口 | 复用率 | 天数 |
 |--------|------|------|------|--------|------|
-| 2.5.1 | 场景判定+降级 | scene_resolver.py | G6+G16 | 40% | 1.0 |
-| 2.5.2 | PDB获取+残基定位 | pdb_locator.py | G8 | ⭐68% | 0.6 |
+| 2.5.1 | 场景判定+降级 | scene_resolver.py | G6+G16 | 40% | 1.0 (含types.py) |
+| 2.5.2 | PDB获取+残基定位 | pdb_locator.py | G8 | ⭐68% | 1.0 (含D19) |
 | 2.5.3 | 配体Mol构建(运行时) | ligand_builder.py | G13 | ⭐MVP 0天 | 0.3 |
 | 2.5.4 | **运行时规则映射+残基识别** | rule_mapper.py | G7 | 58% | 1.0 |
 | 2.5.5 | **Scene A完整验证** | scene_a_validator.py | G1 | 38% | 1.5 |
@@ -438,7 +526,7 @@ GAP_AUDIT_G1-G16 (缺口审计) ← 定义"缺什么+复用什么"
 | 2.5.8 | **EZ SMARTS执行循环** | ez_executor.py | G10 | ⭐60% | 1.0 |
 | 2.5.9 | 中间体3D构象管理 | intermediate_conformer.py | G12 | ⭐60% | 1.0 |
 | 2.5.10 | 置信度分量计算 | confidence_calculator.py | G11 | 0% | 1.0 |
-| 2.5.11 | 管线编排 | pipeline_orchestrator.py | G14 | 0% | 2.0 |
+| 2.5.11 | 管线编排 | pipeline_orchestrator.py | G14 | 0% | 3.0 (含D19) |
 | 2.5.12 | **Scene B验证器骨架** | scene_b_validator.py | — | 0% | 0.5 |
 | 2.5.13 | **Scene C验证器骨架** | scene_c_validator.py | — | 0% | 0.5 |
 
@@ -470,7 +558,7 @@ MechFind 输出的规则 ID 本身是残基识别的关键入口，SMARTS 化学
 - 对 `j_i_s` 格式规则，从 DS5 查得 mcsa_id → 查 M-CSA 缓存 → 获取实验验证残基
 - M-CSA API 返回 `residues[].residue_chains[]` 含 `{code, chain, resid}` 和 `residues[].roles[]`
 - 精确通道: 数据来源为实验文献标注，权威性最高
-- 前置: Phase 3-1 的 M-CSA 批量下载任务确保缓存完整
+- 前置: Phase 1-1 的 M-CSA 批量爬取缓存 (Phase 3-1 补充扩展) 确保缓存完整
 
 **路径3: 化学推断 (仅兜底)**
 - 基于 `residue_info.py` 的 `analyze_residue_roles()` 启发式推断
@@ -482,6 +570,79 @@ MechFind 输出的规则 ID 本身是残基识别的关键入口，SMARTS 化学
 - 催化二联体检测: Cys-His 组合识别
 - 空间验证: 3D距离检查消歧双候选 (如 Asp vs Glu)
 
+### ⭐ PDB自动预选流程 (D19)
+
+**核心问题**: MechFind返回多条路径时，用户不应手动逐条指定PDB和残基
+
+**设计原则**: "选择题而非填空题" — 系统自动预选，用户仅确认/修正
+
+**关键洞察**: MechFind输出自带M-CSA相似度链接，可直接链到PDB
+
+**5步流程**:
+```
+MechFind输出N条路径
+    │
+    ▼
+1. 路径按M-CSA ID分组 (同组共享PDB搜索)
+    │
+    ▼
+2. 每组自动搜索PDB (locate_by_mcsa_id)
+    │
+    ▼
+3. 检查残基兼容性 (check_residue_compatibility)
+    │
+    ▼
+4. 生成确认卡片 → 用户确认/修正
+    │
+    ▼
+5. 批量运行验证
+```
+
+**模块变更表**:
+
+| 模块 | 新增函数 | 说明 |
+|------|---------|------|
+| pdb_locator.py | +locate_by_mcsa_id(mcsa_id) | 通过M-CSA条目直接获取EC→PDB |
+| pdb_locator.py | +check_residue_compatibility(pdb_id, residue_info) | 检查残基是否可定位+推荐场景 |
+| pipeline_orchestrator.py | +_group_paths_by_mcsa(paths) | 按M-CSA ID分组路径 |
+| pipeline_orchestrator.py | +_auto_select_pdbs(path_groups) | 自动确定每组PDB |
+| pipeline_orchestrator.py | +_build_confirmation_card(group) | 生成确认卡片数据 |
+
+**确认卡片数据格式**:
+```json
+{
+  "groups": [
+    {
+      "mcsa_id": 1,
+      "enzyme_name": "Chymotrypsin",
+      "ec_code": "3.4.21.1",
+      "selected_pdb": {
+        "pdb_id": "1CGH",
+        "resolution": 1.67,
+        "has_ligand": true,
+        "ligand_name": "BZA",
+        "ligand_type": "inhibitor"
+      },
+      "candidate_pdbs": ["1GCT", "4H4F"],
+      "paths": [
+        {"path_idx": 0, "score": 0.85, "residue_status": [{"residue": "Ser195", "status": "located"}, {"residue": "His57", "status": "located"}], "recommended_scene": "A"}
+      ],
+      "unmatched_paths": []
+    }
+  ]
+}
+```
+
+**降级与回退**:
+
+| 场景 | 处理 |
+|------|------|
+| M-CSA缓存缺失对应条目 | 降级到用户提供的EC/UniProt→pdb_locator |
+| 无EC/UniProt | Scene C + 标记"需手动指定PDB" |
+| PDB中残基缺失 | 标注⚠️，推荐Scene B |
+| 用户手动覆盖PDB | 重新运行check_residue_compatibility |
+| 残基编号M-CSA与PDB不一致 | 使用DBREF映射 |
+
 **验收标准**:
 - [ ] G6: 场景判定可自动区分A/B/C + A→B降级
 - [ ] G8: PDB获取+催化残基定位正确
@@ -490,8 +651,9 @@ MechFind 输出的规则 ID 本身是残基识别的关键入口，SMARTS 化学
 - [ ] G10: SMARTS执行循环可逐步验证
 - [ ] G14: Top-N候选可并行评估+排序
 - [ ] ⭐ parse_protonation_rule() 覆盖≥90%质子化规则名
+- [ ] ⭐ PDB自动预选: 路径可按M-CSA分组+PDB自动搜索+残基兼容性检查+确认卡片生成
 
-**预计耗时**: 11.4天 (Week 11-13) | **下一步**: Phase 3+4可并行启动
+**预计耗时**: 12.8天 (Week 11-14; 含+1.4天D19 PDB预选) | **下一步**: Phase 3+4可并行启动
 
 ---
 
@@ -668,14 +830,14 @@ DS5 每条记录新增 `residue_info` 对象，持久化 rule→residue 映射�
 
 > 📋 详细清单: `daily-tasks/phase-5.5-1.md` ~ `phase-5.5-4.md`
 
-**目标**: EC 1.x.x.x 氧化还原酶3D验证 + 氢原子坐标生成
+**目标**: 辅因子介导的氧化还原3D验证 + 金属配位几何分析 + 氢原子坐标生成
 
 | 任务ID | 任务 | 产出 | 缺口 | 天数 |
 |--------|------|------|------|------|
 | 5.5.1 | 氧化还原中心识别 | redox_center_identifier.py | G9 | 1 |
-| 5.5.2 | 电子转移验证 | electron_transfer_validator.py | G9 | 1.5 |
+| 5.5.2 | 氧化还原步骤分类 (⭐含cofactor_organic扩展) | redox_step_classifier.py | G9 | 1.5 |
 | 5.5.3 | 辅因子几何验证 | cofactor_geometry_validator.py | G9 | 1.5 |
-| 5.5.4 | 金属中心验证 | metal_center_validator.py | G9 | 1 |
+| 5.5.4 | 金属配位几何分析 | metal_coordination_analyzer.py | G9 | 1 |
 | 5.5.5 | 氧化还原距离类别 | redox_distance_categories.py | G9 | 0.5 |
 | 5.5.6 | 氢原子坐标生成 | hydrogen_adder.py | G15 | 0.3 |
 
@@ -683,13 +845,38 @@ DS5 每条记录新增 `residue_info` 对象，持久化 rule→residue 映射�
 - 氧化还原酶占M-CSA ~25%，是最大酶类
 - MVP策略: Phase 2.5用距离近似(A2用距离替代角度)，本Phase完善
 - G9复用率极低(5%)，大部分需新写
+- ⚠️ **D22 氧化还原验证范围分级**: 只有辅因子介导的氢负离子转移(NAD⁺/NADH、FAD/FADH₂、FMN等)能用Scene A/B做完整3D验证；纯金属价态变化(Fe²⁺→Fe³⁺)的步骤RunReactants无法模拟，不能获得完整3D验证，自动降级至Scene C
+
+### 氧化还原验证范围分级 (D22)
+
+**核心区分**: 氧化还原步骤分为两类，验证能力不同:
+
+| 类别 | 反应类型 | 3D验证能力 | 场景归属 | 示例 |
+|------|---------|-----------|---------|------|
+| 辅因子氢负转移 | NAD⁺/NADH, FAD/FADH₂, FMN | ✅ 完整3D验证 (Scene A/B) | 按PDB+配体状态 | 乙醇脱氢酶(EC 1.1.1.1) |
+| ⭐ 有机辅因子 (cofactor_organic) | PLP(Schiff碱), TPP, 生物素 | ✅ 完整3D验证 (Scene A/B) | 按PDB+配体状态 | 转氨酶(EC 2.6.1.1, PLP) |
+| 金属价态变化 | Fe²⁺→Fe³⁺, Cu⁺→Cu²⁺ | ❌ 不可3D验证 | 自动降级Scene C | 铁氧还蛋白(EC 1.8.7) |
+
+**设计原则**:
+- 辅因子氢负转移: RunReactants可模拟完整反应(辅因子→产物+辅因子'状态)，因此可用Scene A/B验证距离/角度/构象
+- 金属价态变化: RunReactants无法模拟金属离子价态变化(需要量子化学描述)，只能做结构分析(配位距离/键角/配位数)，与CGD统计分布对比给出"配位几何合理性评分"
+- 不声称能验证金属价态变化步骤的化学正确性，只做结构合理性分析
+
+**Phase 7验证影响**:
+- 辅因子氧化还原案例: 纳入Scene A/B评估，计算Top-1命中率
+- 金属氧化还原案例: 仅纳入Scene C评估，不期望3D验证通过
+- 如果不做此区分，Phase 7的Scene A/B命中率会被金属案例拖低，导致数据失真
 
 **验收标准**:
-- [ ] EC 1.x.x.x氧化还原酶可获得完整3D验证
+- [ ] 辅因子介导的氧化还原步骤(NAD⁺/FAD/FMN等)可获得完整3D验证(Scene A/B)
+- [ ] ⭐ 有机辅因子步骤(PLP/TPP/生物素等)可获得完整3D验证(Scene A/B)，分类为cofactor_organic
+- [ ] 金属配位几何分析(距离/角度/配位数，与CGD对比)可用，但不声称3D验证(Heme同此规则)
+- [ ] 纯金属价态变化步骤自动降级至Scene C(CGPS统计评分)
+- [ ] ⭐ redox_step_classifier可自动区分辅因子氢负转移/cofactor_organic/金属价态变化，分类标签供Phase 7使用
+- [ ] ⭐ Heme使用coordination_rationality_score(分析)而非passed(验证)，与metal_coordination_analyzer一致
 - [ ] A2质子转移角度可用精确H坐标计算
-- [ ] 金属配位几何验证(Fe-S, heme等)可用
 
-**预计耗时**: 5.8天 (Week 17-19) | **下一步**: 进入Phase 6
+**预计耗时**: 5.8天 (Week 19-20) | **下一步**: 进入Phase 6
 
 ---
 
@@ -702,8 +889,8 @@ DS5 每条记录新增 `residue_info` 对象，持久化 rule→residue 映射�
 | 任务ID | 任务 | 产出 | 天数 |
 |--------|------|------|------|
 | 6.1 | 主管线编排 | pipeline/main.py | 2 |
-| 6.2 | API服务 | FastAPI: /predict, /results, /step25, /verify, /scene, /cgd/stats | 2 |
-| 6.3 | Web UI | Next.js前端+NGL Viewer | 3 |
+| 6.2 | API服务 | FastAPI: /predict, /results, /step25, /verify, /scene, /cgd/stats | 2.5 |
+| 6.3 | Web UI | Next.js前端+NGL Viewer | 4 |
 | 6.4 | CGD管理界面 | 数据集浏览+覆盖度仪表盘 | 1.5 |
 | 6.5 | 性能优化 | 缓存+并行+批量 | 1.5 |
 
@@ -714,7 +901,9 @@ DS5 每条记录新增 `residue_info` 对象，持久化 rule→residue 映射�
 - [ ] Web UI: 3场景均可交互验证
 - [ ] API: 所有端点可调通
 
-**预计耗时**: 10天 (Week 19-21) | **下一步**: 进入Phase 7
+**预计耗时**: 11.5天 (Week 19-22; 含+1.5天D19确认卡片) | **下一步**: 进入Phase 7
+
+⭐ **D22管线集成要求**: 主管线(pipeline/main.py)必须在场景判定后、EZ验证前调用redox_step_classifier，将含金属价态变化步骤的路径自动降级至Scene C。EZ executor(2.5-8)必须区分"匹配失败"(eliminated)和"无SMARTS可匹配"(skip+S_path=0)。RunReactants验证器(5-4)必须返回inapplicable状态(非fail)对金属步骤。Phase 7 LOECO(7.2)和降级实验(7.2.5)必须按redox_subclass分层统计，避免金属案例拖低Scene A/B指标。详见DAILY_TASKS_AUDIT_REPORT.md。
 
 ### API 接口约定
 
@@ -735,6 +924,13 @@ DS5 每条记录新增 `residue_info` 对象，持久化 rule→residue 映射�
 **关键 Pydantic 模型**:
 
 ```python
+class VerifyRequest(BaseModel):
+    task_id: str
+    scene: Literal["A", "B", "C"]
+    pdb_id: Optional[str] = None
+    ligand_mappings: Optional[List[Dict]] = None
+    selected_paths: List[int]
+
 class PredictRequest(BaseModel):
     substrate_smiles: str
     product_smiles: str
@@ -776,23 +972,65 @@ class VerificationResult(BaseModel):
 
 ## Phase 7: 验证与论文
 
-> 📋 详细清单: `daily-tasks/phase-7-1.md`, `phase-7-2.md`, `phase-7-2.5.md`, `phase-7-3.md`
+> 📋 详细清单: `daily-tasks/phase-7-1.md`, `phase-7-2.md`, `phase-7-2.5.md`, `phase-7-3.md`, `phase-7-4.md`
 
 **目标**: M-CSA验证 + 渐进降级交叉验证 + 论文
 
 | 任务ID | 任务 | 产出 | 天数 |
 |--------|------|------|------|
-| 7.1 | M-CSA留出验证 | 验证报告(80/20) | 3 |
-| 7.2 | 跨EC泛化 | 泛化报告 | 2 |
-| 7.2.5 | ⭐ **渐进降级交叉验证** | 降级曲线+PAP RMSD验证 | 3 |
+| 7.1 | M-CSA留出验证 (⭐含D22 redox_subclass分离) | 验证报告(80/20) | 4 |
+| 7.2 | 跨EC泛化 (⭐含D22 redox_subclass分层统计) | 泛化报告 | 2 |
+| 7.2.5 | ⭐ **渐进降级交叉验证** (含D22 redox_subclass标注+分层统计) | 降级曲线+PAP RMSD验证 | 3 |
 | 7.3 | CGD约束对比 | 无约束vs筛选overlay图表 | 1.5 |
-| 7.4 | LLM消融 | 有Agent vs 无Agent | 1.5 |
-| 7.5 | 论文图表 | 架构+流程+分布+结果图 | 1 |
-| 7.6 | 论文章节 | 方法+结果 3.1-3.8 | 1 |
+| 7.4 | **IDR验证** (7.2.5后续处理，读取7.2.5产出) | IDR评分+降级曲线 | 1.0 | ← 不重复7.2.5的实验，读取progressive_degradation.json |
+| 7.5 | ⭐ **LLM消融 (D23: 4组精简消融)** | 消融报告+分场景+Agent一致性 | 1.5 |
+| 7.6 | 论文图表 | 架构+流程+分布+结果图 | 1 |
+| 7.7 | 论文章节 | 方法+结果 3.1-3.9 | 1 |
+
+### ⭐ 4组消融实验设计 (D23)
+
+**设计原则**: 精简高效，覆盖审稿人核心关切，最小化LLM成本
+
+**4组配置**:
+
+| 配置 | 组件 | 量化问题 | LLM调用/样本 |
+|------|------|---------|-------------|
+| full | MF+EZ+CGPS+A1②③④⑤⑥ | 基线 | ~7 (自然管线) |
+| compute_only | MF+EZ+CGPS | Agent整体价值 | 0 |
+| no_review | MF+EZ+CGPS+A1② | 评审团③④⑤⑥价值 | ~2 |
+| no_A6 | MF+EZ+CGPS+A1②③④⑤ | 仲裁者⑥价值 | ~6 |
+
+**成本估算** (GPT-4o + 自然管线):
+- 计算管线: 1次运行(结果缓存) ≈ 2-3h
+- LLM总调用: ~2,940次 ≈ **$30**
+- 开发+运行: 2-3天
+
+**3个零成本分析维度** (后处理分组统计，无需额外运行):
+
+| 维度 | 方法 | 论文位置 |
+|------|------|---------|
+| 分场景Agent贡献 | 按Scene A/B/C分组: Acc_full - Acc_compute_only | 主文图3 |
+| 分争议级别仲裁效果 | 按dispute_level分组: 仲裁前后准确率差 | Supp Material |
+| Agent一致性 | Agent③④⑤两两Cohen's κ + Pearson r | Supp Material |
+
+**论文4张主文图**:
+1. 消融柱状图 (4组 × Top-1/3/5)
+2. Agent边际贡献瀑布图 (compute_only → full逐步加回)
+3. 分场景Agent贡献分组柱状图 (Scene A/B/C)
+4. IDR降级曲线 (Scene A→B→C + Agent on/off)
+
+**关键叙事** (论文3.9消融分析):
+> "我们通过消融实验量化了每个Agent组件的贡献。总体而言，Agent系统将Top-1准确率从X%(纯计算)提升至Y%(完整系统)，其中评审团(Agent③④⑤)贡献了Z%的提升。值得注意的是，Agent的贡献在不同信息层级下差异显著：在Scene A(完整3D数据)中Agent仅贡献a%，而在Scene C(无结构数据)中Agent贡献了b%——这表明LLM推理在信息缺失时发挥了不可替代的补偿作用。"
 
 ### 渐进降级交叉验证 (D16)
 
 > **定位**: 这不是外部准确性基准，而是**内部一致性评估**。Scene A 是"银标准"（系统输入信息最丰富时的输出），不是"金标准"（非QM/MM或实验验证的绝对真理）。本实验量化"信息缺失时系统输出的衰减程度和一致性"，不能证明B/C的绝对准确性。
+
+> ⚠️ **D22氧化还原分类影响**: Phase 7.1验证时必须将氧化还原案例分为两类:
+> - **辅因子氧化还原**(NAD⁺/FAD/FMN介导): 纳入Scene A/B评估，计算Top-1命中率
+> - **金属氧化还原**(Fe²⁺→Fe³⁺等): 仅纳入Scene C评估，不期望3D验证通过
+>
+> 如果不做此区分，Scene A/B命中率会被金属案例拖低，导致数据失真
 
 **论文表述范式** (必须遵循):
 
@@ -841,12 +1079,17 @@ class VerificationResult(BaseModel):
          Scene A → B → C  (信息递减)
 ```
 
-**验收标准**:
-- [ ] M-CSA验证: Top-1命中率>60%
-- [ ] ⭐ 渐进降级: A-B排名一致率>65%, A-C排名一致率>45%
-- [ ] ⭐ PAP RMSD: 中位数≤3.0Å
-- [ ] CGD约束: 筛选overlay显著优于无约束(p<0.05)
-- [ ] 论文: 方法部分完整，降级曲线图可发表
+**验收标准** (⚠️ 两级标准):
+- [ ] **硬性标准** (任务完成必要条件):
+  - M-CSA验证: full_pool/limited_pool/mechfind_failure三分类完成, D22 redox_subclass标注完成
+  - ⭐ 渐进降级: 三模式(ABC)均可正确运行, Scene C使用A的残基组合
+  - CGD约束: 对比实验完成(无论统计显著性)
+  - 论文: 方法部分完整，降级曲线图可发表
+- [ ] **参考目标** (性能期望, 未达标不阻塞):
+  - M-CSA Top-1命中率>60% (full_pool子集)
+  - ⭐ 渐进降级: A-B排名一致率>65%, A-C排名一致率>45%
+  - ⭐ PAP RMSD: 中位数≤3.0Å
+  - CGD约束: 筛选overlay显著优于无约束(p<0.05)
 
 ### E1-E5 早期预警检查点
 
@@ -889,7 +1132,7 @@ E1 双阈值检查:
 - 阈值2 大面积 limited_pool (>40% entries 候选 <5) → 规则库覆盖不足，Phase 3 DS5 Layer 1 和 Phase 5 Agent② 需加强
 - 两者都正常 → full-pool 子集足够大，E2-E5 量化评估有意义
 
-**预计耗时**: 13天 (Week 23-25) | **下一步**: 项目完成
+**预计耗时**: 14.5天 (Week 23-26; 含+1.5天IDR验证) | **下一步**: 项目完成
 
 ---
 
@@ -918,14 +1161,17 @@ Phase 3   Phase 4                    │
     Phase 5 (Agent管线 + DS5 L1 + 争议检测)
        │
        ▼
-    Phase 5.5 (氧化还原 + 氢原子)
+    Phase 5.5 (氧化还原 + 氢原子) ← ⚠️ 5.5.1-5.5.4可与Phase 5部分并行
        │
        ▼
     Phase 6 (系统集成 + Web UI)
        │
        ▼
     Phase 7 (验证 + 论文)
+      ├── 7.1 → 7.2 → 7.2.5 → 7.4(7.2.5后续处理+阈值优化)
+      ├── 7.3 (CGD对比)
+      └── 7.5 → 7.6 → 7.7
 ```
 
-**关键路径**: Phase 0→1→2→2.5→3→4→5→5.5→6→7 = ~136天 (含Phase 3/5.5并行，实际~27周)
-**可并行**: Phase 3与Phase 2部分并行; Phase 5的Agent①②可在Phase 4期间启动
+**关键路径**: Phase 0→1→2→2.5→3→4→5→5.5→6→7 = ~140天 (含Phase 3/5.5并行，实际~28周)
+**可并行**: Phase 3与Phase 2部分并行; Phase 5的Agent①②可在Phase 4期间启动; **Phase 5.5(5.5.1-5.5.4)可与Phase 5部分并行**(不依赖Agent③-⑥)

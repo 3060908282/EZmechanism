@@ -4,7 +4,7 @@
 **任务编号**: 6.2  
 **前置依赖**: phase-6-1 (主管线编排)  
 **阻塞后续**: phase-6-3 (Web UI调用API)  
-**预计耗时**: 2天  
+**预计耗时**: 2.5天 (+0.5天 for D19 confirmation-card + recheck API端点)  
 
 ---
 
@@ -58,7 +58,45 @@
   - `/scene`: 给定 EC/PDB → 场景判定
   - **验收**: /verify 和 /scene 端点功能正确
 
-- [ ] 6.2.7 实现错误处理和文档 + ⭐ OpenAPI Schema 导出
+- [ ] 6.2.7 实现 /predict/confirmation-card 端点
+  - 输入: substrate_smiles, product_smiles, ec_code, pdb_id
+  - 4步流程: MechFind → _group_paths_by_mcsa → _auto_select_pdbs → _build_confirmation_card
+  - 输出: ConfirmationCard JSON
+  - 异步执行 (SSE或task_id模式)
+  - **验收**: confirmation-card端点可返回确认卡片数据
+
+- [ ] 6.2.8 实现 /predict/confirmation-card/{task_id}/recheck 端点
+  - 输入: group_idx, new_pdb_id
+  - 流程: 重新运行check_residue_compatibility → 更新确认卡片
+  - **验收**: 切换PDB后兼容性检查可重新运行
+
+- [ ] 6.2.9 ⭐ 实现 SSE 进度推送端点 `/events/{task_id}` (M24修复)
+  - ⚠️ **M24修复**: phase-6-3 (Web UI) 依赖此端点订阅验证进度，必须在本任务中实现
+  - 实现 Server-Sent Events (SSE) 端点:
+    ```python
+    @app.get("/events/{task_id}")
+    async def stream_events(task_id: str):
+        async def event_generator():
+            while True:
+                status = task_store.get(task_id)
+                if status is None:
+                    yield {"event": "error", "data": "task not found"}
+                    break
+                yield {"event": "progress", "data": json.dumps(status)}
+                if status["state"] in ("completed", "failed"):
+                    break
+                await asyncio.sleep(1)
+        return EventSourceResponse(event_generator())
+    ```
+  - 进度事件类型:
+    - `progress`: `{state: "running", step: "场景判定", progress: 0.3, details: "..."}`
+    - `completed`: `{state: "completed", result_url: "/results/{task_id}"}`
+    - `failed`: `{state: "failed", error: "..."}`
+  - ⭐ D22集成: 进度事件新增`D22氧化还原分类`步骤
+  - 需安装: `sse-starlette` 包
+  - **验收**: SSE端点可推送实时进度, phase-6-3可订阅显示
+
+- [ ] 6.2.10 实现错误处理和文档 + ⭐ OpenAPI Schema 导出
   - 全局异常处理: 返回结构化错误 JSON
   - OpenAPI 文档: 自动生成 (FastAPI 默认)
   - ⭐ **OpenAPI Schema 导出**: `app.openapi()` → 保存为 `docs/api_schema.json`
@@ -68,7 +106,7 @@
   - 速率限制: /predict 10次/分钟/IP, /results 60次/分钟/IP, 其余端点不限
   - **验收**: API endpoints functional, 错误处理完善, `docs/api_schema.json` 导出成功
 
-- [ ] 6.2.8 健康检查端点: GET /health → {"status": "ok"}
+- [ ] 6.2.11 健康检查端点: GET /health → {"status": "ok"}
   - 用于负载均衡器和监控系统探测服务状态
   - 无需认证，无速率限制
   - **验收**: GET /health 返回 {"status": "ok"}
@@ -90,6 +128,7 @@
 2. **内存泄漏**: 多次请求后 Mol 对象可能不被回收，需在请求结束时显式清理
 3. **并发安全**: 多个请求可能同时访问共享缓存，需线程安全
 4. **API 超时**: FastAPI 默认无请求超时，需用 uvicorn timeout 或中间件设置
+5. **⭐ SSE连接管理**: SSE连接可能因客户端断开而悬挂，需设置心跳超时(30s)和连接数上限(100)。长任务完成后主动关闭SSE连接，避免资源泄漏
 
 ---
 

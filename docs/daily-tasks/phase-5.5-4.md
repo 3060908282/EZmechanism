@@ -1,8 +1,8 @@
-# Phase 5.5-4: 金属中心+扩展距离+氢原子
+# Phase 5.5-4: 金属配位几何分析+扩展距离+氢原子
 
 **Phase**: 5.5  
 **任务编号**: 5.5.4+5.5.5+5.5.6  
-**前置依赖**: phase-5.5-2 (电子转移验证), phase-5.5-3 (辅因子几何验证)  
+**前置依赖**: phase-5.5-2 (氧化还原步骤分类), phase-5.5-3 (辅因子几何验证)  
 **阻塞后续**: Phase 6 (系统集成需要完整的验证模块)  
 **预计耗时**: 1.8天  
 
@@ -10,21 +10,26 @@
 
 ## 任务清单
 
-### 5.5.4: 金属中心验证
+### 5.5.4: 金属配位几何分析
 
-- [ ] 5.5.4.1 编写 `ez_validator/redox/metal_center_validator.py`
-  - 核心函数: `validate_metal_center(metal_atom, coordination_residues, pdb_structure) → MetalCenterResult`
-  - `MetalCenterResult`: metal_type, coordination_number, geometry_type, distances, angles, passed
+> ⚠️ **D22 重要定位修正**: 本模块不是"金属中心验证器"(旧名`metal_center_validator.py`)，而是"金属配位几何分析器"(`metal_coordination_analyzer.py`)。它**不声称能验证金属氧化还原步骤的化学正确性**(RunReactants无法模拟Fe²⁺→Fe³⁺等价态变化)，只做**结构合理性分析**:分析金属配位距离、键角、配位数，与CGD统计分布对比，给出"配位几何合理性评分"。
+
+- [ ] 5.5.4.1 编写 `ez_validator/redox/metal_coordination_analyzer.py`
+  - 核心函数: `analyze_metal_coordination(metal_atom, coordination_residues, pdb_structure) → MetalCoordinationResult`
+  - `MetalCoordinationResult`: metal_type, coordination_number, geometry_type, distances, angles, coordination_rationality_score, is_verifiable_3d (always False for metal), analysis_note
+  - **与旧版关键区别**: 旧版`MetalCenterResult`含`passed`(暗示验证)，新版`coordination_rationality_score`(明确是分析评分而非验证结果)
   - **验收**: 模块可导入运行
 
-- [ ] 5.5.4.2 实现配位几何验证
+- [ ] 5.5.4.2 实现配位几何分析
   - 常见配位几何:
     - 四面体 (4配位): Zn²⁺, 典型距离 2.0-2.5Å
     - 八面体 (6配位): Fe²⁺/³⁺, Mg²⁺, 典型距离 2.0-2.3Å
     - 四方锥 (5配位): Cu²⁺, 过渡态
     - 平面四方 (4配位): Cu²⁺, Ni²⁺
-  - 验证: 配位数 + 键角偏差 < 20° + 键长在合理范围
-  - **验收**: Metal coordination validated
+  - 分析内容: 配位数 + 键角偏差 + 键长合理性
+  - 与CGD统计分布对比: 计算coordination_rationality_score (0-1，基于距离/角度在CGD分布中的百分位)
+  - ⚠️ **不验证氧化还原步骤**: 仅输出"配位几何合理性评分"，不声称金属价态变化步骤通过验证
+  - **验收**: Metal coordination analysis produces rationality score
 
 ### 5.5.5: 氧化还原扩展距离类别 (D7-D10)
 
@@ -71,11 +76,11 @@
 
 ## 输出文件清单
 
-- `ez_validator/redox/metal_center_validator.py`
+- `ez_validator/redox/metal_coordination_analyzer.py`
 - `ez_validator/redox/redox_distance_categories.py`
 - `ez_validator/scoring/s_geo_runtime.py` (updated)
 - `ez_validator/geometry/hydrogen_adder.py`
-- `tests/test_metal_center_validator.py`
+- `tests/test_metal_coordination_analyzer.py`
 - `tests/test_redox_distance_categories.py`
 - `tests/test_hydrogen_adder.py`
 
@@ -88,6 +93,7 @@
 3. **D7-D10 阈值**: 初始阈值为经验值，需在 Phase 7 用 M-CSA 数据校准
 4. **H 坐标精度**: RDKit AddHs 的 H 位置是近似的，精确位置需量子化学计算，但对角度计算已足够
 5. **MMFF 固定重原子**: 优化 H 位置时需固定重原子坐标，否则会扰动整个结构
+6. **⚠️ 金属分析≠验证(D22)**: `metal_coordination_analyzer.py`输出的是"配位几何合理性评分"而非"验证通过/失败"。金属价态变化步骤在管线中自动降级至Scene C，不会获得3D验证结果
 
 ---
 

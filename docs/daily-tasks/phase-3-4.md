@@ -3,7 +3,7 @@
 **Phase**: 3  
 **任务编号**: 3.4  
 **前置依赖**: phase-3-3 (DS5 Layer 0构建完成, 含residue_info)  
-**阻塞后续**: Phase 2.5-4 (运行时规则映射查询使用此表), Phase 5 (Agent② 消歧)  
+**阻塞后续**: Phase 2.5-4 运行时查询 (开发期用mock数据，Phase 3完成后切换真实数据), Phase 5 (Agent② 消歧)  
 **预计耗时**: 0.5天  
 
 ---

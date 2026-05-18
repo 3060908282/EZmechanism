@@ -2,9 +2,10 @@
 
 **Phase**: 2.5  
 **任务编号**: 2.5.5  
-**前置依赖**: phase-2.5-2 (PDB定位), phase-2.5-3 (配体Mol构建), phase-2.5-4 (规则映射, S_path评分需要), phase-2.5-6 (VerificationResult格式, 接口优先定义)  
-⚠️ **重要**: 请先完成 phase-2.5-6 (VerificationResult格式定义), 尽管其文件编号在后。2.5.5的验证流程依赖VerificationResult数据结构。  
-**阻塞后续**: phase-2.5-7 (S_geo组合), phase-2.5-8 (EZ执行循环), phase-2.5-10 (置信度), phase-2.5-11 (管线编排)  
+**前置依赖**: phase-2.5-1 (场景判定), phase-2.5-2 (PDB定位), phase-2.5-3 (配体Mol构建), phase-2.5-4 (规则映射, S_path评分需要), phase-2.5-6 (VerificationResult格式, 接口优先定义), phase-2.5-7 (S_geo运行时组合, 2.5.5.5调用s_geo_runtime.py)  
+⚠️ **重要**: 请按以下顺序开发: 2.5-6 → 2.5-7 → 2.5-5。2.5-5的验证流程依赖VerificationResult数据结构(2.5-6)和S_geo组合函数(2.5-7)。2.5-7是纯数学函数, 不依赖2.5-5的运行结果, 应先于2.5-5完成。  
+**阻塞后续**: phase-2.5-8 (EZ执行循环), phase-2.5-10 (置信度), phase-2.5-11 (管线编排)  
+⚠️ **注意**: phase-2.5-7 是本任务的前置依赖而非后续，不列入阻塞后续。  
 **预计耗时**: 1.5天  
 
 ---

@@ -29,7 +29,7 @@
 
 ## 任务清单
 
-- [ ] 7.2.5.1 筛选 Scene A 候选集 + E1 双阈值分类
+- [ ] 7.2.5.1 筛选 Scene A 候选集 + E1 双阈值分类 + ⭐ D22氧化还原标注
   - 从 M-CSA 测试集 (~200 entries) 中筛选有 PDB + 配体的 entries
   - **第一层: 三重过滤** (结构质量):
     1. PDB 分辨率 ≤ 2.5Å
@@ -46,27 +46,42 @@
     - 阈值2: 候选路径数 ≥ 5
       - ✅ → 标记为 `full_pool` (纳入量化评估)
       - ❌ (<5) → 标记为 `limited_pool` (仅定性分析)
+  - **⭐ 第三层: D22氧化还原分类** (验证范围标注):
+    - 对EC 1(氧化还原酶)的entry, 调用redox_step_classifier标注redox_subclass:
+      - `cofactor_redox`: 辅因子介导(NAD/FAD等) → Scene A/B可完整3D验证
+      - `metal_redox`: 金属价态变化(Fe/Cu等) → Scene A/B中金属步骤3D验证不适用, RunReactants对金属步骤返回inapplicable
+      - `mixed_redox`: 同时含辅因子和金属步骤 → 辅因子步骤可验证, 金属步骤不可验证
+      - `non_redox`: 非氧化还原酶(EC 2-7) → 无需分类
+    - redox_subclass字段写入degradation_candidates.json, 供后续分析分层统计
+    - ⚠️ metal_redox条目不应从full_pool中排除, 而应在分析时单独统计
   - **输出三类集合**:
     - `full_pool`: 预估 ~80-120 条 → 纳入 E2-E5 量化评估 + 渐进降级实验
     - `limited_pool`: 预估 ~15-30 条 → 仅执行管线 + 产出定性报告
     - `mechfind_failure`: 排除，仅记录失败原因
-  - 输出: `data/reports/degradation_candidates.json` (含 pool_tag 字段)
-  - **验收**: full_pool 集合 ≥ 80 条，全部满足三重过滤 + E1 双阈值
-  - **HANDBOOK 验收标准**:
-    - A-B 排名一致率 > 65%
-    - A-C 排名一致率 > 45%
-    - Top-1 准确率 > 60% (full_pool子集)
-    - PAP RMSD 预期 1.5-3.0Å
+  - 输出: `data/reports/degradation_candidates.json` (含 pool_tag + redox_subclass 字段)
+  - **验收**: full_pool 集合 ≥ 80 条，全部满足三重过滤 + E1 双阈值 + D22分类标注
+  - **HANDBOOK 验收标准** (⚠️ 两级标准):
+    - **硬性标准** (任务完成必要条件):
+      - full_pool ≥ 80条, 限limited_pool + mechfind_failure 有统计
+      - 三模式(ABC)均可正确运行, Scene C使用A的残基组合
+      - D22 redox_subclass标注完成, metal_redox条目在分析中单独统计
+    - **参考目标** (性能期望, 未达标不阻塞):
+      - A-B 排名一致率 > 65%
+      - A-C 排名一致率 > 45%
+      - Top-1 准确率 > 60% (full_pool子集)
+      - PAP RMSD 预期 1.5-3.0Å
 
 - [ ] 7.2.5.2 实现管线三模式运行 (full-pool + limited-pool 分别处理)
   - 编写 `validation/progressive_degradation.py`
   - **对 full-pool 条目** (~80-120条): 依次执行三种模式
 
-  | 运行模式 | 输入参数 | 管线行为 | 产出 |
-  |---------|---------|---------|------|
-  | Scene A | `substrate, product, ec, pdb_id, ligand_het` | 完整3D验证 | `Result_A` |
-  | Scene B | `substrate, product, ec, pdb_id` (**不传ligand_het**) | PAP放置 + 3D验证 | `Result_B` |
-  | Scene C | `substrate, product, ec` (**不传pdb_id**) + **强制注入A的残基组合** | CGPS纯统计 | `Result_C` |
+  | 运行模式 | 输入参数 | 管线行为 | D22处理 | 产出 |
+  |---------|---------|---------|---------|------|
+  | Scene A | `substrate, product, ec, pdb_id, ligand_het` | 完整3D验证 | metal_redox步骤: RunReactants返回inapplicable→S_path=0, 候选存活 | `Result_A` |
+  | Scene B | `substrate, product, ec, pdb_id` (**不传ligand_het**) | PAP放置 + 3D验证 | 同Scene A: 金属步骤skip | `Result_B` |
+  | Scene C | `substrate, product, ec` (**不传pdb_id**) + **强制注入A的残基组合** | CGPS纯统计 | metal_redox条目: S_geo=0, 仅靠S_co+S_path | `Result_C` |
+
+  - ⭐ **D22降级逻辑**: 管线已集成D22(Phase 6-1步骤2.5), metal_redox条目的含金属步骤在EZ executor中skip而非eliminate, 整条路径仍可获得CGPS评分。Scene A/B中metal_redox的S_path会偏低(金属步骤贡献=0), 但候选不被淘汰
 
   - **Scene C 关键控制**: 为隔离变量（仅测试结构信息缺失的影响），Scene C 的 CGPS 输入残基组合**直接采用 Scene A 已确认的残基组合**，而非路径3推断结果
   - 实现方式: 管线新增参数 `override_residue_combination: Optional[List[str]]`
@@ -106,8 +121,12 @@
   | PAP 底物 RMSD | 任务 7.2.5.3 产出 | full-pool |
 
   - 按 EC 主类分组: EC 1-7 分别计算上述指标
+  - ⭐ **按 D22 redox_subclass 分层统计** (EC 1内部):
+    - cofactor_redox vs metal_redox vs mixed_redox 分别计算A-B/A-C排名一致率
+    - metal_redox子类的Scene A/B排名一致率可能较低(金属步骤无法3D验证→S_path偏低), 这是预期行为(D22)
+    - ⚠️ 金属氧化还原案例的Scene A/B "验证失败"不计入指标分母(因D22已声明3D验证不适用)
   - **limited-pool 子集**: 不计算量化指标，仅记录定性信息
-  - **验收**: full-pool 全部指标计算正确，按 EC 分组统计完成；limited-pool 定性信息记录完整
+  - **验收**: full-pool 全部指标计算正确，按 EC 分组统计完成；D22 redox_subclass分层统计完成；limited-pool 定性信息记录完整
 
 - [ ] 7.2.5.5 生成降级曲线图 (论文核心图表，full-pool 子集)
   - 图1: **降级曲线** — X轴 Scene (A→B→C), Y轴 排名一致率
@@ -172,6 +191,7 @@
 5. **统计功效**: full-pool 子集约 80-120 条可能不足以在细分 EC 类中得出显著结论；总体结论足够，EC 分组结论需标注 "exploratory"
 6. **PAP RMSD 反应中心定义**: 需明确"反应中心原子"的定义 (SMARTS 映射标签 [:1][:2] 对应的原子)，不同定义会导致 RMSD 差异
 7. **limited-pool 不纳入量化的理由**: 候选 <5 条时 Top-1 随机基线约 33% (5条) 或更高 (更少)，量化指标无统计意义；但定性分析仍有价值，可证明管线鲁棒性
+8. **⭐ D22金属氧化还原与降级实验交互**: metal_redox条目在Scene A中运行时, EZ executor对金属步骤返回skip/inapplicable(不淘汰候选), 但S_path偏低。Scene B同理。Scene C中金属条目仅靠S_co+S_path。如果metal_redox条目的A-B/A-C排名一致率显著低于cofactor_redox, 这不说明降级策略失败, 而是说明金属氧化还原的3D验证范围确实有限(D22决策的正确性验证)。分析报告中必须分开报告两类子类的指标, 不可合并
 
 ---
 

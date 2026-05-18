@@ -2,7 +2,7 @@
 
 **Phase**: 5  
 **任务编号**: 5.5  
-**前置依赖**: Phase 4 完成 (CGPS评分可用, 灰色区间已定义); phase-5-2 (Agent①化学审查)  
+**前置依赖**: Phase 4 完成 (CGPS评分可用, 灰色区间已定义), phase-5-2 (Agent①化学审查结果用于触发条件③)  
 **阻塞后续**: phase-5-6 (Agent③④⑤需要争议检测结果触发), phase-5-7 (Agent⑥需要争议上下文)  
 **预计耗时**: 2天  
 
@@ -56,6 +56,17 @@
   - 多触发叠加时 dispute_level 取最高
   - **验收**: Disputed cases detected, 分级正确
 
+- [ ] 5.5.8 ⭐ 实现触发条件⑥ — Scene C 低分强制触发 (三层漏斗第二层: 增强)
+  - **背景**: Scene C无3D验证数据，CGPS评分区分力弱。当Scene C + 低分时，系统不能只返回一个低分沉默退出，必须强制触发Agent评审，将"低置信度结果"转化为"可操作假设"
+  - 条件: `scene == "C"` AND (`CGPS_score ≤ θ_low` OR `quality_score < T_Q`)
+  - 含义: Scene C下评分低或不确定，统计评分不足以支撑判断，需Agent③④⑤提供序列/化学/文献推理
+  - **此触发条件绕过争议检测**，直接强制触发Agent③④⑤ (dispute_level="high")
+  - 与其他触发条件的关系:
+    - Scene C + 低分 → 无论其他条件是否满足，至少触发Agent③④⑤
+    - Scene C + 低分 + 其他争议 → 取最高dispute_level (已经是最高的"high")
+  - Scene C强制触发时Agent使用**Scene C专用prompt** (见phase-5-6的SCENE_C_SYSTEM_PROMPT)
+  - **验收**: Scene C + CGPS≤θ_low → 强制触发Agent③④⑤; Scene C + CGPS>θ_high → 不强制触发
+
 ---
 
 ## 输出文件清单
@@ -72,6 +83,8 @@
 3. **路径断裂与多步匹配**: 部分机制步骤的原子映射本身就不完美 (过渡态模糊)，需容忍少量不连续
 4. **无争议快速路径**: 大部分情况应无争议 → 直接输出，避免不必要的 LLM 调用
 5. **多触发叠加**: 可能同时满足多个触发条件，需正确组合 dispute_level (取最高)
+6. **⭐ Scene C低分强制触发的成本**: 触发Agent③④⑤意味着3次额外LLM调用。但Scene C低分意味着统计评分无法支撑判断，Agent的序列/化学/文献推理可能是唯一的判断依据，值得成本
+7. **⭐ Scene C高分不触发**: 触发条件⑥只对Scene C低分生效。Scene C + CGPS>θ_high → 统计评分已有足够区分力，无需额外Agent调用
 
 ---
 

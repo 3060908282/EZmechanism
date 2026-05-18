@@ -4,7 +4,7 @@
 **任务编号**: 2.5.2  
 **前置依赖**: phase-2.5-1 (场景判定模块)  
 **阻塞后续**: phase-2.5-3 (配体Mol构建), phase-2.5-5 (Scene A验证)  
-**预计耗时**: 0.6天  
+**预计耗时**: 0.8天 (+0.2天 for D19扩展)  
 
 ---
 
@@ -49,11 +49,27 @@
   - 检查配体信息可获取
   - **验收**: Catalytic residues located in 1BTL (SER70, GLU166, etc.)
 
+- [ ] 2.5.2.7 实现 locate_by_mcsa_id(mcsa_id)
+  - D19 PDB自动预选核心函数
+  - 流程: mcsa_id → M-CSA缓存 → EC/UniProt → locate_pdb_and_residues()
+  - M-CSA缓存路径: `data/cache/mcsa_entries/entry_{mcsa_id}.json`
+  - 降级: 缓存缺失→用户EC/UniProt→Scene C
+  - **验收**: 通过mcsa_id可自动定位PDB和残基
+
+- [ ] 2.5.2.8 实现 check_residue_compatibility(pdb_id, residue_info)
+  - D19残基兼容性检查
+  - 输入: pdb_id + ResidueInfo (from types.py)
+  - 输出: ResidueCompatibilityReport (from types.py)
+  - ⭐ **C1修复**: ResidueCompatibilityReport 和 LocatedResidue 定义在 ez_validator/types.py 中，本模块从 types 导入，避免循环依赖
+  - 兼容性判定逻辑: 全located→A, 无配体→B, 关键缺失→C
+  - 双候选消歧: Asp/Glu_pro → 3D距离检查
+  - **验收**: 残基兼容性检查可判定推荐场景
+
 ---
 
 ## 输出文件清单
 
-- `ez_validator/pdb_locator.py`
+- `ez_validator/pdb_locator.py` (含 locate_by_mcsa_id + check_residue_compatibility)
 - `tests/test_pdb_locator.py`
 
 ---
@@ -65,6 +81,9 @@
 3. **chain ID 映射**: M-CSA 记录的 chain 可能与 PDB 不一致，需用 DBREF 做交叉验证
 4. **多 PDB 竞争**: 同一酶可能有多个 PDB，多条件排序时需统一评分函数，避免不同排序维度冲突
 5. **缺失残基**: 部分催化残基可能在 PDB 中缺失 (如柔性 loop 区域)，需在结果中标注并降低置信度
+6. **M-CSA缓存依赖**: locate_by_mcsa_id() 依赖 Phase 1-1 (M-CSA批量爬取, Phase 3-1补充扩展) 的缓存，缓存缺失时需降级
+7. **双候选消歧时机**: Asp/Glu_pro 的消歧在check_residue_compatibility中完成，不要在rule_mapper中提前消歧
+8. **同组共享PDB**: 同一mcsa_id的路径共享PDB搜索结果，避免重复API调用
 
 ---
 

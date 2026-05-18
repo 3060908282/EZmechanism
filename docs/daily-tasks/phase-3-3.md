@@ -3,7 +3,7 @@
 **Phase**: 3  
 **任务编号**: 3.3  
 **前置依赖**: phase-3-1 (MechFind规则解析 + M-CSA批量下载), phase-3-2 (EZ SMARTS规则库)  
-**阻塞后续**: phase-3-4 (规则映射表衍生), Phase 2.5-4 (运行时规则映射查询), Phase 5 (Agent② 1:N映射)  
+**阻塞后续**: phase-3-4 (规则映射表衍生), Phase 2.5-4 运行时查询 (开发期用mock数据，Phase 3完成后切换真实数据), Phase 5 (Agent② 1:N映射)  
 **预计耗时**: 3.5天  
 
 ---
@@ -93,15 +93,39 @@
     - entries 结构: `{residue: null, role: "nucleophile"|"acid/base", atom: "O"|"N"|..., type: "unknown", confidence: ≤0.5}`
   - **验收**: 路径3的 confidence 全部 ≤ 0.5; 路径1/2有结果时不触发路径3; entries 含 role 字段
 
-- [ ] 3.3.6 实现 SMARTS 直接匹配
-  - 对 MechFind 规则的 moiety_changes → 推断键变化模式
-  - 键变化模式 → 生成候选 SMARTS 模板
-  - 候选模板 → 在 6083 条 EZ 规则中搜索
-  - 搜索策略:
-    - 精确匹配: moiety 完全对应
-    - 子结构匹配: moiety 为子集
+- [ ] 3.3.6 实现 SMARTS 直接匹配 (⭐ M12补充: 详细算法规格)
+  - **输入**: MechFind规则的moiety_changes字段 (如 `["OH", "O-"]`, `["C=O", "C-OH"]`)
+  - **输出**: 候选EZ SMARTS列表, 按匹配度排序
+  - **算法5步流程**:
+    1. **解析moiety_changes向量**:
+       - MechFind的moiety_changes格式: `{"before": ["OH", "H"], "after": ["O-", "H+"]}`
+       - 提取变化类型: 键断裂(`C-OH → C=O`), 键形成(`C=O → C-OH`), 质子转移(`OH → O-`), 电子转移
+       - 映射到反应模式: `proton_transfer` | `nucleophilic_attack` | `elimination` | `redox` | `isomerization`
+    2. **生成候选SMARTS模板** (每类反应模式1-3个模板):
+       - `proton_transfer`: `[OD1:1]>>[OD2:1]` (酸去质子), `[ND1:1]>>[ND2:1]` (碱去质子)
+       - `nucleophilic_attack`: `[C:1]=[O:2]>>[C:1]-[O:2]` (亲核加成), `[C:1](-[OD1:2])>>[C:1](-[OD2:2])` (酰基转移)
+       - `elimination`: `[C:1]-[OD2:2]>>[C:1]=[OD1:2]` (β消除)
+       - `redox`: `[C:1]-[OH:2]>>[C:1]=[O:2]` (氧化), `[C:1]=[O:2]>>[C:1]-[OH:2]` (还原)
+       - `isomerization`: `[C:1](-[H:2])(-[H:3])>>[C:1](-[H:3])(-[H:2])` (立体异构)
+    3. **在EZ规则库中搜索匹配**:
+       - 对每个候选SMARTS模板, 在6083条EZ规则中搜索:
+         - 精确匹配: 候选SMARTS与EZ规则的ReactionSMARTS完全匹配 → confidence="exact"
+         - 子结构匹配: 候选SMARTS的产物/反应物模式是EZ规则的子集 → confidence="partial"
+         - 语义匹配: moiety变化语义等价但SMARTS形式不同(如互变异构体) → confidence="semantic"
+       - 搜索策略: 先精确→再子结构→最后语义, 找到即停止
+    4. **消歧** (多候选时):
+       - 优先选择: 精确匹配 > 子结构匹配 > 语义匹配
+       - 同级别: 选择覆盖原子映射标签最多的SMARTS
+       - 记录所有候选, Layer 0仅保留最佳匹配
+    5. **处理匹配失败**:
+       - 无任何候选 → mapping_type="unmapped", 记录moiety_changes原始值
+       - 记录失败原因: "no_template_match" | "no_ez_rule_match" | "ambiguous_moiety"
+  - **示例**:
+    - 输入: `moiety_changes = {"before": ["Ser_OH"], "after": ["Ser_O-"]}` → 反应模式: `proton_transfer`
+    - 候选模板: `[OD1:1]>>[OD2:1]`
+    - 搜索结果: EZ规则R0042 `[OD1:1]>>[OD2:1]` → 精确匹配 → mapping_type="1:1"
   - ⭐ 30% 复用: `find_matching_mols()` 和 `match_smiles_with_smarts()` 可提供匹配基础
-  - **验收**: SMARTS 匹配可找到对应 EZ 规则
+  - **验收**: moiety→SMARTS匹配算法可运行, 至少3种反应模式可正确生成候选; 匹配率≥40%
 
 - [ ] 3.3.7 统计映射覆盖率
   - 计算 1:1 映射率 = (1:1 映射数) / (总规则数)
